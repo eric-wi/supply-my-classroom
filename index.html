@@ -94,6 +94,11 @@ function App(){
   const [editingProduct,setEditingProduct]=useState(null);
   const [loginEmail,setLoginEmail]=useState('');
   const [loginPassword,setLoginPassword]=useState('');
+  const [resetEmail,setResetEmail]=useState('');
+  const [resetToken,setResetToken]=useState('');
+  const [resetNewPassword,setResetNewPassword]=useState('');
+  const [resetConfirmPassword,setResetConfirmPassword]=useState('');
+  const [resetDisplayToken,setResetDisplayToken]=useState('');
   const [loggedInTeacher,setLoggedInTeacher]=useState(null);
 
   const all=[...classrooms,...data.teachers];
@@ -115,6 +120,24 @@ function App(){
     const enc=new TextEncoder().encode(str);
     const buf=await (crypto.subtle || crypto.webkitSubtle).digest('SHA-256',enc);
     return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+  };
+
+  // simple password strength estimator (0-4)
+  const passwordStrength = (pw)=>{
+    if(!pw) return {score:0,label:'Too short'};
+    let score=0;
+    if(pw.length>=8) score++;
+    if(/[A-Z]/.test(pw)) score++;
+    if(/[0-9]/.test(pw)) score++;
+    if(/[^A-Za-z0-9]/.test(pw)) score++;
+    const labels=['Very weak','Weak','Okay','Strong','Very strong'];
+    return {score, label: labels[Math.min(score,4)]};
+  };
+
+  // generate a short reset token (human-friendly)
+  const generateResetToken = ()=>{
+    // 6-digit numeric token
+    return Math.floor(100000 + Math.random()*900000).toString();
   };
 
   const toggle=async (i)=>{
@@ -180,6 +203,8 @@ function App(){
 
   const deleteTeacher=idx=>{const updated={teachers:data.teachers.filter((_,i)=>i!==idx)};setData(updated);saveData(updated);};
   const exportCSV=()=>{const csv=['Name,Grade,District,School,Address,City,Postal Code,Email,Message'].concat(data.teachers.map(t=>`"${t.name}","${t.grade}","${t.district||''}","${t.school||''}","${t.address||''}","${t.city||''}","${t.postalCode||''}","${t.email||''}","${t.message||''}"`)).join('\n');const blob=new Blob([csv],{type:'text/csv'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='teacher-registrations.csv';a.click();};
+  // Export a minimal JSON for migration (no password hashes)
+  const exportForMigration=()=>{const exportData=data.teachers.map(t=>({name:t.name,email:t.email,grade:t.grade,school:t.school,district:t.district}));const blob=new Blob([JSON.stringify(exportData,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='teachers-for-migration.json';a.click();};
   
   const addOrUpdateProduct=()=>{
     if(!productForm.classroomName||!productForm.title||!productForm.price||!productForm.asin){alert('Please fill in all required fields');return;}
@@ -224,10 +249,42 @@ function App(){
   };
   const teacherLogout=()=>{setLoggedInTeacher(null);setPage('store');setWishlist([]);};
 
+  // request a password reset: generate a short token, store its hash and expiry on the teacher record
+  const requestPasswordReset=async(email)=>{
+    const idx=data.teachers.findIndex(t=>t.email===email);
+    if(idx===-1){alert('Email not found.');return;}
+    const token=generateResetToken();
+    const tokenHash=await hashString(token);
+    const expiry=Date.now()+15*60*1000; // 15 minutes
+    const updatedTeachers=data.teachers.map((t,i)=>{if(i===idx){t.resetTokenHash=tokenHash;t.resetTokenExpiry=expiry;}return t;});
+    const nd={teachers:updatedTeachers};setData(nd);saveData(nd);
+    // for local fallback: show the token so admin or teacher can use it, and provide a mailto link
+    setResetDisplayToken(token);
+    setResetEmail(email);
+    setPage('resetPassword');
+  };
+
+  // perform the reset given email + token + newPassword
+  const performPasswordReset=async(email,token,newPassword)=>{
+    const idx=data.teachers.findIndex(t=>t.email===email);
+    if(idx===-1){alert('Email not found.');return;}
+    const found=data.teachers[idx];
+    if(!found.resetTokenHash || !found.resetTokenExpiry || Date.now()>found.resetTokenExpiry){alert('Reset token expired or not found. Request a new one.');return;}
+    const h = await hashString(token);
+    if(h!==found.resetTokenHash){alert('Invalid token.');return;}
+    // validate new password
+    if(!newPassword || newPassword.length<8 || !/[0-9]/.test(newPassword) || !/[A-Za-z]/.test(newPassword)){alert('Password must be at least 8 characters and include letters and numbers.');return;}
+    const newHash = await hashString(newPassword);
+    const updatedTeachers=data.teachers.map((t,i)=>{if(i===idx){t.passwordHash=newHash;delete t.resetTokenHash;delete t.resetTokenExpiry;}return t;});
+    const nd={teachers:updatedTeachers};setData(nd);saveData(nd);
+    alert('Password has been reset. You can now log in.');
+    setPage('teacherLogin');
+  };
+
   const submit=async e=>{
     e.preventDefault();
-    // basic password validation
-    if(!form.password || form.password.length<6){alert('Please choose a password with at least 6 characters.');return;}
+    // stronger password validation: min 8 characters, must include letters and numbers
+    if(!form.password || form.password.length<8 || !/[0-9]/.test(form.password) || !/[A-Za-z]/.test(form.password)){alert('Please choose a stronger password: at least 8 characters, include letters and numbers.');return;}
     if(form.password!==form.confirmPassword){alert('Passwords do not match.');return;}
     // prevent duplicate emails
     if(data.teachers.some(t=>t.email===form.email)){alert('A registration with this email already exists. Please log in or use a different email.');return;}
@@ -269,6 +326,7 @@ function App(){
       ),
       React.createElement('div',{style:{display:'flex',gap:'12px',marginBottom:'24px',flexWrap:'wrap'}},
         adminTab==='registrations'&&React.createElement('button',{className:'btn print-btn',onClick:exportCSV},'Export to CSV'),
+        adminTab==='registrations'&&React.createElement('button',{className:'btn admin-btn',onClick:exportForMigration},'Export for migration'),
         React.createElement('button',{className:'btn clear-wishlist',onClick:()=>{if(confirm('Are you sure?')){if(adminTab==='registrations'){saveData({teachers:[]});setData({teachers:[]});}else{setClassrooms(defaultClassrooms);saveProducts(defaultClassrooms);}setStatus('ok');setTimeout(()=>setStatus(null),2000)}}},adminTab==='registrations'?'Delete All Registrations':'Reset to Defaults'),
         React.createElement('button',{className:'btn back-btn',onClick:adminLogout},'Logout')
       ),
@@ -368,7 +426,53 @@ function App(){
           React.createElement('label',null,'Password'),
           React.createElement('input',{type:'password',className:'form-input',value:loginPassword,onChange:e=>setLoginPassword(e.target.value),placeholder:'Your password'})
         ),
-        React.createElement('button',{className:'btn buy-btn',style:{width:'100%',padding:'12px'},onClick:()=>teacherLogin(loginEmail,loginPassword)},'Login')
+        React.createElement('button',{className:'btn buy-btn',style:{width:'100%',padding:'12px'},onClick:()=>teacherLogin(loginEmail,loginPassword)},'Login'),
+        React.createElement('div',{style:{marginTop:'12px',display:'flex',justifyContent:'center'}},
+          React.createElement('button',{className:'btn back-btn',style:{padding:'8px 12px'},onClick:()=>setPage('resetRequest')},'Forgot password?')
+        )
+      )
+    );
+  }
+
+  if(page==='resetRequest'){
+    return React.createElement('div',{className:'container'},
+      React.createElement('button',{className:'back-btn',onClick:()=>setPage('teacherLogin')},'← Back to Login'),
+      React.createElement('div',{className:'header'},
+        React.createElement('h1',null,'Password Reset'),
+        React.createElement('p',{style:{fontSize:'1.1rem',marginTop:'16px',color:'#6b7280'}},'Enter your registered email to request a password reset token (local fallback)')
+      ),
+      React.createElement('div',{className:'form-container',style:{maxWidth:'480px',margin:'0 auto'}},
+        React.createElement('div',{style:{marginBottom:'16px'}},
+          React.createElement('label',null,'Email Address'),
+          React.createElement('input',{type:'email',className:'form-input',value:resetEmail,onChange:e=>setResetEmail(e.target.value),placeholder:'your.email@school.ca'})
+        ),
+        React.createElement('div',{style:{display:'flex',gap:'12px'}},
+          React.createElement('button',{className:'btn buy-btn',style:{flex:1},onClick:()=>requestPasswordReset(resetEmail)},'Request Reset Token'),
+          React.createElement('button',{className:'btn back-btn',onClick:()=>setPage('teacherLogin')},'Cancel')
+        ),
+        React.createElement('p',{style:{marginTop:12,color:'#6b7280',fontSize:'.95rem'}},'Note: In production this would email a secure link. This local fallback shows the token on the next screen for testing.' )
+      )
+    );
+  }
+
+  if(page==='resetPassword'){
+    return React.createElement('div',{className:'container'},
+      React.createElement('button',{className:'back-btn',onClick:()=>setPage('teacherLogin')},'← Back to Login'),
+      React.createElement('div',{className:'header'},
+        React.createElement('h1',null,'Reset Your Password'),
+        React.createElement('p',{style:{fontSize:'1.1rem',marginTop:'16px',color:'#6b7280'}},'Enter the token you received and choose a new password')
+      ),
+      React.createElement('div',{className:'form-container',style:{maxWidth:'560px',margin:'0 auto'}},
+        resetDisplayToken&&React.createElement('div',{style:{marginBottom:12,padding:12,background:'#fff7ed',border:'1px solid #fde68a',borderRadius:8}},
+          React.createElement('strong',null,'Reset token (for testing): '),React.createElement('span',null,resetDisplayToken),
+          React.createElement('div',null,React.createElement('a',{href:`mailto:${resetEmail}?subject=Password%20Reset%20Token&body=Your%20token%20is%20${resetDisplayToken}`},'Email this token'))
+        ),
+        React.createElement('div',{style:{marginBottom:12}},React.createElement('label',null,'Email'),React.createElement('input',{type:'email',className:'form-input',value:resetEmail,onChange:e=>setResetEmail(e.target.value)})),
+        React.createElement('div',{style:{marginBottom:12}},React.createElement('label',null,'Token'),React.createElement('input',{type:'text',className:'form-input',value:resetToken,onChange:e=>setResetToken(e.target.value)})),
+        React.createElement('div',{style:{marginBottom:12}},React.createElement('label',null,'New password'),React.createElement('input',{type:'password',className:'form-input',value:resetNewPassword,onChange:e=>setResetNewPassword(e.target.value),placeholder:'At least 8 characters'}),
+          React.createElement('div',{style:{marginTop:8,display:'flex',alignItems:'center',gap:12}},React.createElement('small',null,passwordStrength(resetNewPassword).label),React.createElement('div',{style:{display:'flex',gap:'4px'}},[0,1,2,3].map(i=>React.createElement('div',{key:i,style:{width:36,height:8,borderRadius:4,background:i<passwordStrength(resetNewPassword).score?(passwordStrength(resetNewPassword).score<2?'#f97316':'#10b981'):'#e5e7eb'}}))))),
+        React.createElement('div',{style:{marginBottom:12}},React.createElement('label',null,'Confirm new password'),React.createElement('input',{type:'password',className:'form-input',value:resetConfirmPassword,onChange:e=>setResetConfirmPassword(e.target.value)})),
+        React.createElement('div',{style:{display:'flex',gap:12}},React.createElement('button',{className:'btn buy-btn',style:{flex:1},onClick:()=>performPasswordReset(resetEmail,resetToken,resetNewPassword)},'Reset Password'),React.createElement('button',{className:'btn back-btn',onClick:()=>setPage('teacherLogin')},'Cancel'))
       )
     );
   }
@@ -411,7 +515,14 @@ function App(){
           )),
           React.createElement('div',{style:{marginBottom:'20px'}},
             React.createElement('label',null,'Choose a password'),
-            React.createElement('input',{type:'password',className:'form-input',required:true,value:form.password,onChange:e=>setForm({...form,password:e.target.value}),placeholder:'At least 6 characters'})
+            React.createElement('input',{type:'password',className:'form-input',required:true,value:form.password,onChange:e=>setForm({...form,password:e.target.value}),placeholder:'At least 8 characters, include letters and numbers'}),
+            // password strength indicator
+            React.createElement('div',{style:{marginTop:'8px',display:'flex',alignItems:'center',gap:'12px'}},
+              React.createElement('small',null, passwordStrength(form.password).label),
+              React.createElement('div',{style:{display:'flex',gap:'4px'}},
+                [0,1,2,3].map(i=>React.createElement('div',{key:i,style:{width:36,height:8,borderRadius:4,background: i<passwordStrength(form.password).score? (passwordStrength(form.password).score<2?'#f97316':'#10b981') : '#e5e7eb'}}))
+              )
+            )
           ),
           React.createElement('div',{style:{marginBottom:'20px'}},
             React.createElement('label',null,'Confirm password'),
