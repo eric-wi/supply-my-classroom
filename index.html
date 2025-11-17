@@ -85,7 +85,7 @@ function App(){
   const [classroom,setClassroom]=useState('');
   const [wishlist,setWishlist]=useState([]);
   const [qty,setQty]=useState({});
-  const [form,setForm]=useState({name:'',email:'',district:'',school:'',address:'',grade:'',message:''});
+  const [form,setForm]=useState({name:'',email:'',district:'',school:'',address:'',city:'',postalCode:'',grade:'',message:''});
   const [status,setStatus]=useState(null);
   const [adminPassword,setAdminPassword]=useState('');
   const [adminLogged,setAdminLogged]=useState(false);
@@ -150,7 +150,7 @@ function App(){
   };
 
   const deleteTeacher=idx=>{const updated={teachers:data.teachers.filter((_,i)=>i!==idx)};setData(updated);saveData(updated);};
-  const exportCSV=()=>{const csv=['Name,Grade,District,School,Address,Email,Message'].concat(data.teachers.map(t=>`"${t.name}","${t.grade}","${t.district||''}","${t.school||''}","${t.address||''}","${t.email||''}","${t.message||''}"`)).join('\n');const blob=new Blob([csv],{type:'text/csv'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='teacher-registrations.csv';a.click();};
+  const exportCSV=()=>{const csv=['Name,Grade,District,School,Address,City,Postal Code,Email,Message'].concat(data.teachers.map(t=>`"${t.name}","${t.grade}","${t.district||''}","${t.school||''}","${t.address||''}","${t.city||''}","${t.postalCode||''}","${t.email||''}","${t.message||''}"`)).join('\n');const blob=new Blob([csv],{type:'text/csv'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='teacher-registrations.csv';a.click();};
   
   const addOrUpdateProduct=()=>{
     if(!productForm.classroomName||!productForm.title||!productForm.price||!productForm.asin){alert('Please fill in all required fields');return;}
@@ -179,10 +179,10 @@ function App(){
 
   const submit=e=>{
     e.preventDefault();
-    const nt={name:`${form.name} – Grade ${form.grade}`,grade:form.grade,email:form.email,district:form.district,school:form.school,address:form.address,message:form.message,items:[]};
+    const nt={name:`${form.name} – Grade ${form.grade}`,grade:form.grade,email:form.email,district:form.district,school:form.school,address:form.address,city:form.city,postalCode:form.postalCode,message:form.message,items:[]};
     const nd={teachers:[...data.teachers,nt]};
     setData(nd);saveData(nd);setStatus('ok');
-    setTimeout(()=>{setPage('store');setStatus(null);setForm({name:'',email:'',district:'',school:'',address:'',grade:'',message:''});},2000);
+    setTimeout(()=>{setPage('store');setStatus(null);setForm({name:'',email:'',district:'',school:'',address:'',city:'',postalCode:'',grade:'',message:''});},2000);
   };
 
   if(page==='admin'&&!adminLogged){
@@ -231,6 +231,8 @@ function App(){
             React.createElement('p',{style:{marginBottom:'8px'}},'District: '+(t.district||'—')),
             React.createElement('p',{style:{marginBottom:'8px'}},'School: '+(t.school||'—')),
             React.createElement('p',{style:{marginBottom:'8px'}},'Address: '+(t.address||'—')),
+            React.createElement('p',{style:{marginBottom:'8px'}},'City: '+(t.city||'—')),
+            React.createElement('p',{style:{marginBottom:'8px'}},'Postal Code: '+(t.postalCode||'—')),
             React.createElement('p',{style:{marginBottom:'8px'}},'Email: '+(t.email||'—')),
             t.message&&React.createElement('p',{style:{marginBottom:'8px',fontStyle:'italic'}},'Message: '+t.message),
             React.createElement('button',{className:'btn clear-wishlist',style:{width:'100%',marginTop:'12px'},onClick:()=>{if(confirm('Delete this registration?')){deleteTeacher(idx)}}},'Delete')
@@ -306,8 +308,8 @@ function App(){
       React.createElement('div',{className:'form-container'},
         status==='ok'&&React.createElement('div',{style:{padding:'16px',background:'#d1fae5',color:'#065f46',borderRadius:'8px',marginBottom:'20px'}},'Classroom registered! Switch to "Store" to start adding items.'),
         React.createElement('form',{onSubmit:submit},
-          ['name','email','district','school','address','grade'].map(f=>React.createElement('div',{key:f,style:{marginBottom:'20px'}},
-            React.createElement('label',null,f[0].toUpperCase()+f.slice(1).replace('email','Email').replace('address','School Address')),
+          ['name','email','district','school','address','city','postalCode','grade'].map(f=>React.createElement('div',{key:f,style:{marginBottom:'20px'}},
+            React.createElement('label',null,f[0].toUpperCase()+f.slice(1).replace('email','Email').replace('address','School Address').replace('city','City').replace('postalCode','Postal Code')),
             React.createElement('input',{type:f==='email'?'email':'text',className:'form-input',required:f!=='address',value:form[f],onChange:e=>setForm({...form,[f]:e.target.value})})
           )),
           React.createElement('div',{style:{marginBottom:'20px'}},
