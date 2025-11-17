@@ -92,6 +92,8 @@ function App(){
   const [adminTab,setAdminTab]=useState('registrations');
   const [productForm,setProductForm]=useState({classroomName:'',title:'',price:'',image:'',asin:''});
   const [editingProduct,setEditingProduct]=useState(null);
+  const [loginEmail,setLoginEmail]=useState('');
+  const [loggedInTeacher,setLoggedInTeacher]=useState(null);
 
   const all=[...classrooms,...data.teachers];
   const items=all.find(c=>c.name===classroom)?.items||[];
@@ -176,6 +178,12 @@ function App(){
   
   const adminLogin=()=>{if(adminPassword==='admin123'){setAdminLogged(true);setAdminPassword('');}else{alert('Incorrect password')}};
   const adminLogout=()=>{setAdminLogged(false);setAdminPassword('');setPage('store');};
+  
+  const teacherLogin=(email)=>{
+    const found=data.teachers.find(t=>t.email===email);
+    if(found){setLoggedInTeacher(found);setLoginEmail('');setStatus('ok');setTimeout(()=>setStatus(null),2000);}else{alert('Email not found. Please check or register first.');}
+  };
+  const teacherLogout=()=>{setLoggedInTeacher(null);setPage('store');};
 
   const submit=e=>{
     e.preventDefault();
@@ -298,6 +306,46 @@ function App(){
     );
   }
 
+  if(page==='teacherLogin'){
+    return React.createElement('div',{className:'container'},
+      React.createElement('button',{className:'back-btn',onClick:()=>setPage('store')},'← Back to Store'),
+      React.createElement('div',{className:'header'},
+        React.createElement('h1',null,'Teacher Login'),
+        React.createElement('p',{style:{fontSize:'1.2rem',marginTop:'16px',color:'#6b7280'}},'Log in with your registered email to view your classroom info')
+      ),
+      React.createElement('div',{className:'form-container',style:{maxWidth:'400px',margin:'0 auto'}},
+        status==='ok'&&React.createElement('div',{style:{padding:'16px',background:'#d1fae5',color:'#065f46',borderRadius:'8px',marginBottom:'20px'}},'Login successful!'),
+        React.createElement('div',{style:{marginBottom:'20px'}},
+          React.createElement('label',null,'Email Address'),
+          React.createElement('input',{type:'email',className:'form-input',value:loginEmail,onChange:e=>setLoginEmail(e.target.value),placeholder:'your.email@school.ca'})
+        ),
+        React.createElement('button',{className:'btn buy-btn',style:{width:'100%',padding:'12px'},onClick:()=>teacherLogin(loginEmail)},'Login')
+      )
+    );
+  }
+
+  if(loggedInTeacher){
+    return React.createElement('div',{className:'container'},
+      React.createElement('button',{className:'back-btn',onClick:()=>teacherLogout()},'← Logout'),
+      React.createElement('div',{className:'header'},
+        React.createElement('h1',null,'Welcome, '+loggedInTeacher.name.split(' – ')[0]),
+        React.createElement('p',{style:{fontSize:'1.2rem',marginTop:'16px',color:'#6b7280'}},'Your classroom information')
+      ),
+      React.createElement('div',{className:'item-card'},
+        React.createElement('h2',{style:{marginBottom:'16px'}},'Registration Details'),
+        React.createElement('p',{style:{marginBottom:'8px'}},'Name: '+loggedInTeacher.name),
+        React.createElement('p',{style:{marginBottom:'8px'}},'Email: '+loggedInTeacher.email),
+        React.createElement('p',{style:{marginBottom:'8px'}},'Grade: '+loggedInTeacher.grade),
+        React.createElement('p',{style:{marginBottom:'8px'}},'District: '+(loggedInTeacher.district||'—')),
+        React.createElement('p',{style:{marginBottom:'8px'}},'School: '+(loggedInTeacher.school||'—')),
+        React.createElement('p',{style:{marginBottom:'8px'}},'Address: '+(loggedInTeacher.address||'—')),
+        React.createElement('p',{style:{marginBottom:'8px'}},'City: '+(loggedInTeacher.city||'—')),
+        React.createElement('p',{style:{marginBottom:'8px'}},'Postal Code: '+(loggedInTeacher.postalCode||'—')),
+        loggedInTeacher.message&&React.createElement('p',{style:{marginBottom:'8px',fontStyle:'italic'}},'Message: '+loggedInTeacher.message)
+      )
+    );
+  }
+
   if(page==='register'){
     return React.createElement('div',{className:'container'},
       React.createElement('button',{className:'back-btn',onClick:()=>setPage('store')},'← Back to Store'),
@@ -334,6 +382,7 @@ function App(){
     React.createElement('div',{className:'nav'},
       React.createElement('button',{className:`nav-btn ${page==='store'?'active':''}`,onClick:()=>setPage('store')},'Store'),
       React.createElement('button',{className:`nav-btn ${page==='register'?'active':''}`,onClick:()=>setPage('register')},'Register'),
+      React.createElement('button',{className:`nav-btn ${page==='teacherLogin'?'active':''}`,onClick:()=>setPage('teacherLogin')},'Teacher Login'),
       React.createElement('button',{className:`nav-btn ${page==='admin'?'active':''}`,onClick:()=>setPage('admin')},'Admin')
     ),
     React.createElement('div',{className:'select-container'},
