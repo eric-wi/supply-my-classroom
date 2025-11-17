@@ -24,18 +24,18 @@
         select:focus,.form-input:focus,.form-textarea:focus{outline:none;border-color:#4f46e5;box-shadow:0 0 0 3px rgba(79,70,229,.1)}
         .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:24px}
         .item-card:hover{transform:translateY(-4px);box-shadow:0 20px 40px rgba(0,0,0,.12)}
-        /* ← 35% BIGGER IMAGES (220 → 297px) */
         .item-image{width:100%;height:297px;object-fit:cover;border-radius:8px;margin-bottom:16px}
         .quantity-container{display:flex;align-items:center;gap:8px;margin:12px 0}
         .quantity-btn{width:36px;height:36px;border:2px solid #e5e7eb;background:white;font-size:1.2rem;display:flex;align-items:center;justify-content:center;border-radius:8px;cursor:pointer}
         .quantity{min-width:48px;text-align:center;font-weight:600}
         .wishlist-count{background:#4f46e5;color:white;padding:8px 16px;border-radius:9999px;font-weight:600}
-        .total-price{background:linear-gradient(135deg,#10b981,#059669);Color:white;padding:12px 20px;border-radius:9999px;font-weight:700;font-size:1.1rem}
+        .total-price{background:linear-gradient(135deg,#10b981,#059669);color:white;padding:12px 20px;border-radius:9999px;font-weight:700;font-size:1.1rem}
         .buy-btn{background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white}
         .add-to-wishlist{background:#10b981;color:white}
         .in-wishlist{background:#f59e0b;color:white}
         .clear-wishlist{background:#ef4444;color:white}
         .print-btn{background:#1f2937;color:white}
+        .admin-btn{background:#6366f1;color:white}
         .disclosure{background:#f8f9ff;border:1px solid #e0e7ff;color:#4c1d95;text-align:center}
         @media(max-width:768px){h1{font-size:2.9rem}.header::after{width:90px;height:5px}}
     </style>
@@ -54,7 +54,7 @@ const BASE_URL="https://www.amazon.ca/dp";
 const loadData=()=>{const d=localStorage.getItem(STORAGE_KEY);return d?JSON.parse(d):{teachers:[]}};
 const saveData=d=>localStorage.setItem(STORAGE_KEY,JSON.stringify(d));
 
-const defaultClassrooms=[{name:"Ms. Johnson – Grade 1",grade:"1",items:[{asin:"B07P5JVNX9",title:"Crayola Crayons 24-Pack",price:2.97,image:"https://m.media-amazon.com/images/I/81K3F9Q0MKL._AC_SY200_.jpg"},{asin:"B07MK6Q3RX",title:"Elmer’s Glue Sticks 6-Pack",price:4.97,image:"https://m.media-amazon.com/images/I/71o3Z5Kk7JL._AC_SY200_.jpg"},{asin:"B01J8S2IWU",title:"Fiskars Kids Scissors",price:3.97,image:"https://m.media-amazon.com/images/I/71Q1qL2eZCL._AC_SY200_.jpg"}]},{name:"Mr. Singh – Grade 3",grade:"3",items:[{asin:"B07H4VBF6T",title:"Expo Dry-Erase Markers 8-Pack",price:9.97,image:"https://m.media-amazon.com/images/I/81N4K8g8M8L._AC_SY200_.jpg"},{asin:"B07C5NSB6R",title:"Sharpie Highlighters 12-Pack",price:7.97,image:"https://m.media-amazon.com/images/I/81K3F9Q0MKL._AC_SY200_.jpg"}]},{name:"Mme. Lefèvre – Grade 5 French Immersion",grade:"5",items:[{asin:"B08L5Y9Z3K",title:"Bescherelle Conjugation Book",price:14.95,image:"https://m.media-amazon.com/images/I/71o3Z5Kk7JL._AC_SY200_.jpg"}]},{name:"Ms. Chen – Grade 7 Science",grade:"7",items:[{asin:"B07K7P2X5Q",title:"Safety Goggles (12-Pack)",price:29.97,image:"https://m.media-amazon.com/images/I/81N4K8g8M8L._AC_SY200_.jpg"}]},{name:"Mr. Patel – Grade 9 Math",grade:"9",items:[{asin:"B07GZR2N7Q",title:"TI-30XS Calculator",price:19.97,image:"https://m.media-amazon.com/images/I/71Q1qL2eZCL._AC_SY200_.jpg"},{asin:"B01B4T5KJI",title:"Staedtler Geometry Set",price:8.47,image:"https://m.media-amazon.com/images/I/81K3F9Q0MKL._AC_SY200_.jpg"}]}];
+const defaultClassrooms=[{name:"Ms. Johnson – Grade 1",grade:"1",items:[{asin:"B07P5JVNX9",title:"Crayola Crayons 24-Pack",price:2.97,image:"https://m.media-amazon.com/images/I/81K3F9Q0MKL._AC_SY200_.jpg"},{asin:"B07MK6Q3RX",title:"Elmer's Glue Sticks 6-Pack",price:4.97,image:"https://m.media-amazon.com/images/I/71o3Z5Kk7JL._AC_SY200_.jpg"},{asin:"B01J8S2IWU",title:"Fiskars Kids Scissors",price:3.97,image:"https://m.media-amazon.com/images/I/71Q1qL2eZCL._AC_SY200_.jpg"}]},{name:"Mr. Singh – Grade 3",grade:"3",items:[{asin:"B07H4VBF6T",title:"Expo Dry-Erase Markers 8-Pack",price:9.97,image:"https://m.media-amazon.com/images/I/81N4K8g8M8L._AC_SY200_.jpg"},{asin:"B07C5NSB6R",title:"Sharpie Highlighters 12-Pack",price:7.97,image:"https://m.media-amazon.com/images/I/81K3F9Q0MKL._AC_SY200_.jpg"}]},{name:"Mme. Lefèvre – Grade 5 French Immersion",grade:"5",items:[{asin:"B08L5Y9Z3K",title:"Bescherelle Conjugation Book",price:14.95,image:"https://m.media-amazon.com/images/I/71o3Z5Kk7JL._AC_SY200_.jpg"}]},{name:"Ms. Chen – Grade 7 Science",grade:"7",items:[{asin:"B07K7P2X5Q",title:"Safety Goggles (12-Pack)",price:29.97,image:"https://m.media-amazon.com/images/I/81N4K8g8M8L._AC_SY200_.jpg"}]},{name:"Mr. Patel – Grade 9 Math",grade:"9",items:[{asin:"B07GZR2N7Q",title:"TI-30XS Calculator",price:19.97,image:"https://m.media-amazon.com/images/I/71Q1qL2eZCL._AC_SY200_.jpg"},{asin:"B01B4T5KJI",title:"Staedtler Geometry Set",price:8.47,image:"https://m.media-amazon.com/images/I/81K3F9Q0MKL._AC_SY200_.jpg"}]}];
 
 function App(){
   const [page,setPage]=useState('store');
@@ -64,6 +64,8 @@ function App(){
   const [qty,setQty]=useState({});
   const [form,setForm]=useState({name:'',email:'',district:'',school:'',grade:'',message:''});
   const [status,setStatus]=useState(null);
+  const [adminPassword,setAdminPassword]=useState('');
+  const [adminLogged,setAdminLogged]=useState(false);
 
   const all=[...defaultClassrooms,...data.teachers];
   const items=all.find(c=>c.name===classroom)?.items||[];
@@ -92,23 +94,73 @@ function App(){
     window.open(links[p],'_blank');
   };
 
+  const deleteTeacher=idx=>{const updated={teachers:data.teachers.filter((_,i)=>i!==idx)};setData(updated);saveData(updated);};
+  const exportCSV=()=>{const csv=['Name,Grade,District,School,Email,Message'].concat(data.teachers.map(t=>`"${t.name}","${t.grade}","${t.district||''}","${t.school||''}","${t.email||''}","${t.message||''}"`)).join('\n');const blob=new Blob([csv],{type:'text/csv'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='teacher-registrations.csv';a.click();};
+  const adminLogin=()=>{if(adminPassword==='admin123'){setAdminLogged(true);setAdminPassword('');}else{alert('Incorrect password')}};
+  const adminLogout=()=>{setAdminLogged(false);setAdminPassword('');setPage('store');};
+
   const submit=e=>{
     e.preventDefault();
-    const nt={name:`${form.name} – Grade ${form.grade}`,grade:form.grade,items:[]};
+    const nt={name:`${form.name} – Grade ${form.grade}`,grade:form.grade,email:form.email,district:form.district,school:form.school,message:form.message,items:[]};
     const nd={teachers:[...data.teachers,nt]};
     setData(nd);saveData(nd);setStatus('ok');
     setTimeout(()=>{setPage('store');setStatus(null);setForm({name:'',email:'',district:'',school:'',grade:'',message:''});},2000);
   };
+
+  if(page==='admin'&&!adminLogged){
+    return React.createElement('div',{className:'container'},
+      React.createElement('div',{className:'header'},
+        React.createElement('h1',null,'Admin Dashboard'),
+        React.createElement('p',{style:{fontSize:'1.1rem',marginTop:'16px',color:'#6b7280'}},'Enter password to access teacher registrations')
+      ),
+      React.createElement('div',{className:'form-container',style:{maxWidth:'400px',margin:'0 auto'}},
+        React.createElement('div',{style:{marginBottom:'20px'}},
+          React.createElement('label',null,'Admin Password'),
+          React.createElement('input',{type:'password',className:'form-input',value:adminPassword,onChange:e=>setAdminPassword(e.target.value),placeholder:'Enter password'})
+        ),
+        React.createElement('div',{style:{display:'flex',gap:'12px'}},
+          React.createElement('button',{className:'btn buy-btn',style:{flex:1},onClick:adminLogin},'Login'),
+          React.createElement('button',{className:'btn back-btn',onClick:()=>setPage('store')},'Cancel')
+        )
+      )
+    );
+  }
+
+  if(page==='admin'&&adminLogged){
+    return React.createElement('div',{className:'container'},
+      React.createElement('div',{className:'header'},
+        React.createElement('h1',null,'Teacher Registrations'),
+        React.createElement('p',{style:{fontSize:'1.1rem',marginTop:'16px',color:'#6b7280'}},'Total: '+data.teachers.length+' registrations')
+      ),
+      React.createElement('div',{style:{display:'flex',gap:'12px',marginBottom:'24px',flexWrap:'wrap'}},
+        React.createElement('button',{className:'btn print-btn',onClick:exportCSV},'Export to CSV'),
+        React.createElement('button',{className:'btn clear-wishlist',onClick:()=>{if(confirm('Delete all registrations?')){saveData({teachers:[]});setData({teachers:[]})}}},'Delete All'),
+        React.createElement('button',{className:'btn back-btn',onClick:adminLogout},'Logout')
+      ),
+      data.teachers.length===0?React.createElement('div',{className:'disclosure'},'No registrations yet.'):
+      React.createElement('div',{className:'grid'},
+        data.teachers.map((t,idx)=>React.createElement('div',{key:idx,className:'item-card'},
+          React.createElement('h3',{style:{fontSize:'1.2rem',marginBottom:'12px',color:'#4f46e5'}},t.name),
+          React.createElement('p',{style:{marginBottom:'8px'}},'Grade: '+t.grade),
+          React.createElement('p',{style:{marginBottom:'8px'}},'District: '+(t.district||'—')),
+          React.createElement('p',{style:{marginBottom:'8px'}},'School: '+(t.school||'—')),
+          React.createElement('p',{style:{marginBottom:'8px'}},'Email: '+(t.email||'—')),
+          t.message&&React.createElement('p',{style:{marginBottom:'8px',fontStyle:'italic'}},'Message: '+t.message),
+          React.createElement('button',{className:'btn clear-wishlist',style:{width:'100%',marginTop:'12px'},onClick:()=>{if(confirm('Delete this registration?')){deleteTeacher(idx)}}},'Delete')
+        ))
+      )
+    );
+  }
 
   if(page==='register'){
     return React.createElement('div',{className:'container'},
       React.createElement('button',{className:'back-btn',onClick:()=>setPage('store')},'← Back to Store'),
       React.createElement('div',{className:'header'},
         React.createElement('h1',null,'Register Your Classroom'),
-        React.createElement('p',{style:{fontSize:'1.2rem',marginTop:'16px',color:'#6b7280'}},'Add your name and we’ll create a wishlist just for you!')
+        React.createElement('p',{style:{fontSize:'1.2rem',marginTop:'16px',color:'#6b7280'}},"Add your name and we'll create a wishlist just for you!")
       ),
       React.createElement('div',{className:'form-container'},
-        status==='ok'&&React.createElement('div',{style:{padding:'16px',background:'#d1fae5',color:'#065f46',borderRadius:'8px',marginBottom:'20px'}},'Classroom registered! Switch to “Store” to start adding items.'),
+        status==='ok'&&React.createElement('div',{style:{padding:'16px',background:'#d1fae5',color:'#065f46',borderRadius:'8px',marginBottom:'20px'}},'Classroom registered! Switch to "Store" to start adding items.'),
         React.createElement('form',{onSubmit:submit},
           ['name','email','district','school','grade'].map(f=>React.createElement('div',{key:f,style:{marginBottom:'20px'}},
             React.createElement('label',null,f[0].toUpperCase()+f.slice(1).replace('email','Email')),
@@ -133,7 +185,8 @@ function App(){
     ),
     React.createElement('div',{className:'nav'},
       React.createElement('button',{className:`nav-btn ${page==='store'?'active':''}`,onClick:()=>setPage('store')},'Store'),
-      React.createElement('button',{className:`nav-btn ${page==='register'?'active':''}`,onClick:()=>setPage('register')},'Register')
+      React.createElement('button',{className:`nav-btn ${page==='register'?'active':''}`,onClick:()=>setPage('register')},'Register'),
+      React.createElement('button',{className:`nav-btn ${page==='admin'?'active':''}`,onClick:()=>setPage('admin')},'Admin')
     ),
     React.createElement('div',{className:'select-container'},
       React.createElement('label',null,'Choose a classroom to supply'),
