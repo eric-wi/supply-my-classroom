@@ -165,7 +165,7 @@ function App(){
         React.createElement('form',{onSubmit:submit},
           ['name','email','district','school','address','grade'].map(f=>React.createElement('div',{key:f,style:{marginBottom:'20px'}},
             React.createElement('label',null,f[0].toUpperCase()+f.slice(1).replace('email','Email').replace('address','School Address')),
-            React.createElement('input',{type:f==='email'?'email':'text',className:'form-input',required:f!=='address',value:form[f],onChange:e=>setForm({...form,[f]:e.target.value}),placeholder:f==='address'?'Optional':''})
+            React.createElement('input',{type:f==='email'?'email':'text',className:'form-input',required:f!=='address',value:form[f],onChange:e=>setForm({...form,[f]:e.target.value})})
           )),
           React.createElement('div',{style:{marginBottom:'20px'}},
             React.createElement('label',null,'Message (optional)'),
