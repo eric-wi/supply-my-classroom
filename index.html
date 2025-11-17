@@ -85,7 +85,7 @@ function App(){
   const [classroom,setClassroom]=useState('');
   const [wishlist,setWishlist]=useState([]);
   const [qty,setQty]=useState({});
-  const [form,setForm]=useState({name:'',email:'',district:'',school:'',address:'',city:'',postalCode:'',grade:'',message:''});
+  const [form,setForm]=useState({name:'',email:'',district:'',school:'',address:'',city:'',postalCode:'',grade:'',message:'',password:'',confirmPassword:''});
   const [status,setStatus]=useState(null);
   const [adminPassword,setAdminPassword]=useState('');
   const [adminLogged,setAdminLogged]=useState(false);
@@ -93,6 +93,7 @@ function App(){
   const [productForm,setProductForm]=useState({classroomName:'',title:'',price:'',image:'',asin:''});
   const [editingProduct,setEditingProduct]=useState(null);
   const [loginEmail,setLoginEmail]=useState('');
+  const [loginPassword,setLoginPassword]=useState('');
   const [loggedInTeacher,setLoggedInTeacher]=useState(null);
 
   const all=[...classrooms,...data.teachers];
@@ -108,7 +109,33 @@ function App(){
   const total=wishlist.reduce((s,i)=>s+i.price*(qty[i.asin]||1),0);
   const count=wishlist.reduce((s,i)=>s+(qty[i.asin]||1),0);
 
-  const toggle=i=>setWishlist(w=>w.some(x=>x.asin===i.asin)?w.filter(x=>x.asin!==i.asin):[...w,i]);
+  // helper to hash passwords using SHA-256
+  const hashString = async (str)=>{
+    if(!str) return null;
+    const enc=new TextEncoder().encode(str);
+    const buf=await (crypto.subtle || crypto.webkitSubtle).digest('SHA-256',enc);
+    return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+  };
+
+  const toggle=async (i)=>{
+    if(loggedInTeacher){
+      // persist teacher's personal wishlist into their registration record
+      const updatedTeachers=data.teachers.map(t=>{
+        if(t.email===loggedInTeacher.email){
+          const exists=(t.items||[]).some(x=>x.asin===i.asin);
+          t.items = exists ? (t.items||[]).filter(x=>x.asin!==i.asin) : [...(t.items||[]), i];
+        }
+        return t;
+      });
+      const nd={teachers:updatedTeachers};
+      setData(nd);saveData(nd);
+      const updated = nd.teachers.find(t=>t.email===loggedInTeacher.email);
+      setLoggedInTeacher(updated);
+      setWishlist(updated.items||[]);
+    } else {
+      setWishlist(w=>w.some(x=>x.asin===i.asin)?w.filter(x=>x.asin!==i.asin):[...w,i]);
+    }
+  };
   const q=(a,d)=>setQty(p=>({...p,[a]:Math.max(1,(p[a]||1)+d)}));
   const clear=()=>{setWishlist([]);setQty({});};
 
@@ -179,18 +206,36 @@ function App(){
   const adminLogin=()=>{if(adminPassword==='admin123'){setAdminLogged(true);setAdminPassword('');}else{alert('Incorrect password')}};
   const adminLogout=()=>{setAdminLogged(false);setAdminPassword('');setPage('store');};
   
-  const teacherLogin=(email)=>{
-    const found=data.teachers.find(t=>t.email===email);
-    if(found){setLoggedInTeacher(found);setLoginEmail('');setStatus('ok');setTimeout(()=>setStatus(null),2000);}else{alert('Email not found. Please check or register first.');}
+  const teacherLogin=async(email,password)=>{
+    const idx=data.teachers.findIndex(t=>t.email===email);
+    if(idx===-1){alert('Email not found. Please check or register first.');return;}
+    const found=data.teachers[idx];
+    if(!found.passwordHash){alert('This account does not have a password set.');return;}
+    const h = await hashString(password);
+    if(h===found.passwordHash){
+      // load teacher wishlist into session
+      setLoggedInTeacher(found);
+      setLoginEmail('');setLoginPassword('');
+      setWishlist(found.items||[]);
+      // ensure qty defaults
+      const nq={...qty};(found.items||[]).forEach(i=>{if(!nq[i.asin])nq[i.asin]=1;});setQty(nq);
+      setStatus('ok');setTimeout(()=>setStatus(null),2000);
+    } else {alert('Incorrect password');}
   };
-  const teacherLogout=()=>{setLoggedInTeacher(null);setPage('store');};
+  const teacherLogout=()=>{setLoggedInTeacher(null);setPage('store');setWishlist([]);};
 
-  const submit=e=>{
+  const submit=async e=>{
     e.preventDefault();
-    const nt={name:`${form.name} – Grade ${form.grade}`,grade:form.grade,email:form.email,district:form.district,school:form.school,address:form.address,city:form.city,postalCode:form.postalCode,message:form.message,items:[]};
+    // basic password validation
+    if(!form.password || form.password.length<6){alert('Please choose a password with at least 6 characters.');return;}
+    if(form.password!==form.confirmPassword){alert('Passwords do not match.');return;}
+    // prevent duplicate emails
+    if(data.teachers.some(t=>t.email===form.email)){alert('A registration with this email already exists. Please log in or use a different email.');return;}
+    const passwordHash = await hashString(form.password);
+    const nt={name:`${form.name} – Grade ${form.grade}`,grade:form.grade,email:form.email,district:form.district,school:form.school,address:form.address,city:form.city,postalCode:form.postalCode,message:form.message,items:[],passwordHash:passwordHash};
     const nd={teachers:[...data.teachers,nt]};
     setData(nd);saveData(nd);setStatus('ok');
-    setTimeout(()=>{setPage('store');setStatus(null);setForm({name:'',email:'',district:'',school:'',address:'',city:'',postalCode:'',grade:'',message:''});},2000);
+    setTimeout(()=>{setPage('store');setStatus(null);setForm({name:'',email:'',district:'',school:'',address:'',city:'',postalCode:'',grade:'',message:'',password:'',confirmPassword:''});},2000);
   };
 
   if(page==='admin'&&!adminLogged){
@@ -319,7 +364,11 @@ function App(){
           React.createElement('label',null,'Email Address'),
           React.createElement('input',{type:'email',className:'form-input',value:loginEmail,onChange:e=>setLoginEmail(e.target.value),placeholder:'your.email@school.ca'})
         ),
-        React.createElement('button',{className:'btn buy-btn',style:{width:'100%',padding:'12px'},onClick:()=>teacherLogin(loginEmail)},'Login')
+        React.createElement('div',{style:{marginBottom:'20px'}},
+          React.createElement('label',null,'Password'),
+          React.createElement('input',{type:'password',className:'form-input',value:loginPassword,onChange:e=>setLoginPassword(e.target.value),placeholder:'Your password'})
+        ),
+        React.createElement('button',{className:'btn buy-btn',style:{width:'100%',padding:'12px'},onClick:()=>teacherLogin(loginEmail,loginPassword)},'Login')
       )
     );
   }
@@ -360,6 +409,14 @@ function App(){
             React.createElement('label',null,f[0].toUpperCase()+f.slice(1).replace('email','Email').replace('address','School Address').replace('city','City').replace('postalCode','Postal Code')),
             React.createElement('input',{type:f==='email'?'email':'text',className:'form-input',required:f!=='address',value:form[f],onChange:e=>setForm({...form,[f]:e.target.value})})
           )),
+          React.createElement('div',{style:{marginBottom:'20px'}},
+            React.createElement('label',null,'Choose a password'),
+            React.createElement('input',{type:'password',className:'form-input',required:true,value:form.password,onChange:e=>setForm({...form,password:e.target.value}),placeholder:'At least 6 characters'})
+          ),
+          React.createElement('div',{style:{marginBottom:'20px'}},
+            React.createElement('label',null,'Confirm password'),
+            React.createElement('input',{type:'password',className:'form-input',required:true,value:form.confirmPassword,onChange:e=>setForm({...form,confirmPassword:e.target.value}),placeholder:'Re-enter password'})
+          ),
           React.createElement('div',{style:{marginBottom:'20px'}},
             React.createElement('label',null,'Message (optional)'),
             React.createElement('textarea',{className:'form-textarea',rows:4,value:form.message,onChange:e=>setForm({...form,message:e.target.value})})
