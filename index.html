@@ -64,12 +64,37 @@
 
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<!-- Firebase SDK v9+ (modular) -->
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js"></script>
 <script>
 const {useState,useEffect}=React;
 const STORAGE_KEY='supplyMyClassroom_data';
 const PRODUCTS_STORAGE_KEY='supplyMyClassroom_products';
 const AFFILIATE_TAG="wideen-20";
 const BASE_URL="https://www.amazon.ca/dp";
+
+// Firebase config (stored in localStorage to enable easy switching)
+const FIREBASE_CONFIG_KEY='supplyMyClassroom_firebaseConfig';
+const getFirebaseConfig=()=>JSON.parse(localStorage.getItem(FIREBASE_CONFIG_KEY)||'null');
+const saveFirebaseConfig=(cfg)=>localStorage.setItem(FIREBASE_CONFIG_KEY,JSON.stringify(cfg));
+let firebaseInitialized=false;
+let db=null;
+
+const initFirebase=(config)=>{
+  try{
+    if(!firebaseInitialized){
+      firebase.initializeApp(config);
+      firebaseInitialized=true;
+      db=firebase.firestore();
+    }
+    return true;
+  }catch(e){
+    console.error('Firebase init error:',e);
+    return false;
+  }
+};
 
 const loadData=()=>{const d=localStorage.getItem(STORAGE_KEY);return d?JSON.parse(d):{teachers:[]}};
 const saveData=d=>localStorage.setItem(STORAGE_KEY,JSON.stringify(d));
@@ -100,6 +125,10 @@ function App(){
   const [resetConfirmPassword,setResetConfirmPassword]=useState('');
   const [resetDisplayToken,setResetDisplayToken]=useState('');
   const [loggedInTeacher,setLoggedInTeacher]=useState(null);
+
+  const [firebaseConfig,setFirebaseConfig]=useState(getFirebaseConfig()||{apiKey:'',authDomain:'',projectId:'',storageBucket:'',messagingSenderId:'',appId:''});
+  const [firebaseConfigMode,setFirebaseConfigMode]=useState(false);
+  const [firebaseStatus,setFirebaseStatus]=useState('');
 
   const all=[...classrooms,...data.teachers];
   const items=all.find(c=>c.name===classroom)?.items||[];
@@ -138,6 +167,77 @@ function App(){
   const generateResetToken = ()=>{
     // 6-digit numeric token
     return Math.floor(100000 + Math.random()*900000).toString();
+  };
+
+  // Firebase auth helpers (use Firebase if configured, else fall back to localStorage)
+  const registerWithFirebase=async(email,password,userProfile)=>{
+    const cfg=getFirebaseConfig();
+    if(!cfg || !firebaseInitialized){
+      // fallback: use localStorage
+      return {success:false, method:'localStorage'};
+    }
+    try{
+      const auth=firebase.auth();
+      const cred=await auth.createUserWithEmailAndPassword(email,password);
+      // store profile in Firestore
+      await db.collection('users').doc(cred.user.uid).set({
+        ...userProfile,
+        email:email,
+        uid:cred.user.uid,
+        createdAt:new Date(),
+        items:[]
+      });
+      return {success:true, uid:cred.user.uid, method:'firebase'};
+    }catch(e){
+      console.error('Firebase registration error:',e);
+      return {success:false, error:e.message, method:'firebase'};
+    }
+  };
+
+  const loginWithFirebase=async(email,password)=>{
+    const cfg=getFirebaseConfig();
+    if(!cfg || !firebaseInitialized){
+      // fallback: use localStorage
+      return {success:false, method:'localStorage'};
+    }
+    try{
+      const auth=firebase.auth();
+      const cred=await auth.signInWithEmailAndPassword(email,password);
+      // load profile from Firestore
+      const docSnap=await db.collection('users').doc(cred.user.uid).get();
+      if(!docSnap.exists()){
+        await auth.signOut();
+        return {success:false, error:'User profile not found', method:'firebase'};
+      }
+      return {success:true, user:docSnap.data(), uid:cred.user.uid, method:'firebase'};
+    }catch(e){
+      console.error('Firebase login error:',e);
+      return {success:false, error:e.message, method:'firebase'};
+    }
+  };
+
+  const logoutWithFirebase=async()=>{
+    const cfg=getFirebaseConfig();
+    if(cfg && firebaseInitialized){
+      try{
+        await firebase.auth().signOut();
+      }catch(e){console.error('Firebase logout error:',e);}
+    }
+  };
+
+  const sendPasswordResetEmailWithFirebase=async(email)=>{
+    const cfg=getFirebaseConfig();
+    if(!cfg || !firebaseInitialized){
+      return {success:false, method:'localStorage'};
+    }
+    try{
+      const auth=firebase.auth();
+      await auth.sendPasswordResetEmail(email);
+      return {success:true, method:'firebase'};
+    }catch(e){
+      console.error('Firebase reset email error:',e);
+      return {success:false, error:e.message, method:'firebase'};
+    }
   };
 
   const toggle=async (i)=>{
@@ -232,22 +332,41 @@ function App(){
   const adminLogout=()=>{setAdminLogged(false);setAdminPassword('');setPage('store');};
   
   const teacherLogin=async(email,password)=>{
-    const idx=data.teachers.findIndex(t=>t.email===email);
-    if(idx===-1){alert('Email not found. Please check or register first.');return;}
-    const found=data.teachers[idx];
-    if(!found.passwordHash){alert('This account does not have a password set.');return;}
-    const h = await hashString(password);
-    if(h===found.passwordHash){
-      // load teacher wishlist into session
-      setLoggedInTeacher(found);
-      setLoginEmail('');setLoginPassword('');
-      setWishlist(found.items||[]);
-      // ensure qty defaults
-      const nq={...qty};(found.items||[]).forEach(i=>{if(!nq[i.asin])nq[i.asin]=1;});setQty(nq);
-      setStatus('ok');setTimeout(()=>setStatus(null),2000);
-    } else {alert('Incorrect password');}
+    // try Firebase first
+    const fbResult=await loginWithFirebase(email,password);
+    if(fbResult.method==='firebase'){
+      if(fbResult.success){
+        setLoggedInTeacher(fbResult.user);
+        setLoginEmail('');setLoginPassword('');
+        setWishlist(fbResult.user.items||[]);
+        const nq={...qty};(fbResult.user.items||[]).forEach(i=>{if(!nq[i.asin])nq[i.asin]=1;});setQty(nq);
+        setStatus('ok');setTimeout(()=>setStatus(null),2000);
+      }else{
+        alert('Login failed: '+(fbResult.error||'unknown error'));
+      }
+    } else {
+      // localStorage fallback
+      const idx=data.teachers.findIndex(t=>t.email===email);
+      if(idx===-1){alert('Email not found. Please check or register first.');return;}
+      const found=data.teachers[idx];
+      if(!found.passwordHash){alert('This account does not have a password set.');return;}
+      const h = await hashString(password);
+      if(h===found.passwordHash){
+        setLoggedInTeacher(found);
+        setLoginEmail('');setLoginPassword('');
+        setWishlist(found.items||[]);
+        const nq={...qty};(found.items||[]).forEach(i=>{if(!nq[i.asin])nq[i.asin]=1;});setQty(nq);
+        setStatus('ok');setTimeout(()=>setStatus(null),2000);
+      } else {alert('Incorrect password');}
+    }
   };
-  const teacherLogout=()=>{setLoggedInTeacher(null);setPage('store');setWishlist([]);};
+  
+  const teacherLogout=async()=>{
+    await logoutWithFirebase();
+    setLoggedInTeacher(null);
+    setPage('store');
+    setWishlist([]);
+  };
 
   // request a password reset: generate a short token, store its hash and expiry on the teacher record
   const requestPasswordReset=async(email)=>{
@@ -288,11 +407,35 @@ function App(){
     if(form.password!==form.confirmPassword){alert('Passwords do not match.');return;}
     // prevent duplicate emails
     if(data.teachers.some(t=>t.email===form.email)){alert('A registration with this email already exists. Please log in or use a different email.');return;}
-    const passwordHash = await hashString(form.password);
-    const nt={name:`${form.name} – Grade ${form.grade}`,grade:form.grade,email:form.email,district:form.district,school:form.school,address:form.address,city:form.city,postalCode:form.postalCode,message:form.message,items:[],passwordHash:passwordHash};
-    const nd={teachers:[...data.teachers,nt]};
-    setData(nd);saveData(nd);setStatus('ok');
-    setTimeout(()=>{setPage('store');setStatus(null);setForm({name:'',email:'',district:'',school:'',address:'',city:'',postalCode:'',grade:'',message:'',password:'',confirmPassword:''});},2000);
+    
+    // try Firebase first, fall back to localStorage
+    const fbResult=await registerWithFirebase(form.email,form.password,{
+      name:`${form.name} – Grade ${form.grade}`,
+      grade:form.grade,
+      email:form.email,
+      district:form.district,
+      school:form.school,
+      address:form.address,
+      city:form.city,
+      postalCode:form.postalCode,
+      message:form.message
+    });
+    
+    if(fbResult.method==='firebase'){
+      if(fbResult.success){
+        setStatus('ok');
+        setTimeout(()=>{setPage('store');setStatus(null);setForm({name:'',email:'',district:'',school:'',address:'',city:'',postalCode:'',grade:'',message:'',password:'',confirmPassword:''});},2000);
+      }else{
+        alert('Firebase registration failed: '+(fbResult.error||'unknown error'));
+      }
+    } else {
+      // localStorage fallback
+      const passwordHash = await hashString(form.password);
+      const nt={name:`${form.name} – Grade ${form.grade}`,grade:form.grade,email:form.email,district:form.district,school:form.school,address:form.address,city:form.city,postalCode:form.postalCode,message:form.message,items:[],passwordHash:passwordHash};
+      const nd={teachers:[...data.teachers,nt]};
+      setData(nd);saveData(nd);setStatus('ok');
+      setTimeout(()=>{setPage('store');setStatus(null);setForm({name:'',email:'',district:'',school:'',address:'',city:'',postalCode:'',grade:'',message:'',password:'',confirmPassword:''});},2000);
+    }
   };
 
   if(page==='admin'&&!adminLogged){
@@ -322,15 +465,35 @@ function App(){
       ),
       React.createElement('div',{className:'tab-container'},
         React.createElement('button',{className:`tab-btn ${adminTab==='registrations'?'active':''}`,onClick:()=>setAdminTab('registrations')},'Teacher Registrations'),
-        React.createElement('button',{className:`tab-btn ${adminTab==='products'?'active':''}`,onClick:()=>setAdminTab('products')},'Store Products')
+        React.createElement('button',{className:`tab-btn ${adminTab==='products'?'active':''}`,onClick:()=>setAdminTab('products')},'Store Products'),
+        React.createElement('button',{className:`tab-btn ${adminTab==='firebase'?'active':''}`,onClick:()=>setAdminTab('firebase')},'Firebase Config')
       ),
       React.createElement('div',{style:{display:'flex',gap:'12px',marginBottom:'24px',flexWrap:'wrap'}},
         adminTab==='registrations'&&React.createElement('button',{className:'btn print-btn',onClick:exportCSV},'Export to CSV'),
         adminTab==='registrations'&&React.createElement('button',{className:'btn admin-btn',onClick:exportForMigration},'Export for migration'),
-        React.createElement('button',{className:'btn clear-wishlist',onClick:()=>{if(confirm('Are you sure?')){if(adminTab==='registrations'){saveData({teachers:[]});setData({teachers:[]});}else{setClassrooms(defaultClassrooms);saveProducts(defaultClassrooms);}setStatus('ok');setTimeout(()=>setStatus(null),2000)}}},adminTab==='registrations'?'Delete All Registrations':'Reset to Defaults'),
+        React.createElement('button',{className:'btn clear-wishlist',onClick:()=>{if(confirm('Are you sure?')){if(adminTab==='registrations'){saveData({teachers:[]});setData({teachers:[]});}else if(adminTab==='products'){setClassrooms(defaultClassrooms);saveProducts(defaultClassrooms);}setStatus('ok');setTimeout(()=>setStatus(null),2000)}}},adminTab==='registrations'?'Delete All Registrations':(adminTab==='products'?'Reset to Defaults':'')),
         React.createElement('button',{className:'btn back-btn',onClick:adminLogout},'Logout')
       ),
       status==='ok'&&React.createElement('div',{style:{padding:'16px',background:'#d1fae5',color:'#065f46',borderRadius:'8px',marginBottom:'20px'}},'Saved successfully!'),
+      firebaseStatus&&React.createElement('div',{style:{padding:'16px',background:firebaseStatus.includes('Error')?'#fee2e2':'#d1fae5',color:firebaseStatus.includes('Error')?'#991b1b':'#065f46',borderRadius:'8px',marginBottom:'20px'}},firebaseStatus),
+      
+      adminTab==='firebase'&&React.createElement('div',null,
+        React.createElement('h2',null,'Firebase Configuration'),
+        React.createElement('p',{style:{color:'#6b7280',marginBottom:'16px'}},'Enter your Firebase credentials below to enable cloud-based authentication and storage.'),
+        !firebaseConfigMode?React.createElement('div',null,
+          React.createElement('p',{style:{marginBottom:'8px'}},getFirebaseConfig()?'✓ Firebase configured':'⚠ Firebase not configured'),
+          React.createElement('button',{className:'btn admin-btn',onClick:()=>setFirebaseConfigMode(true)},'Configure Firebase')
+        ):React.createElement('div',{className:'form-container'},
+          ['apiKey','authDomain','projectId','storageBucket','messagingSenderId','appId'].map(key=>React.createElement('div',{key:key,style:{marginBottom:'16px'}},
+            React.createElement('label',null,key),
+            React.createElement('input',{type:'text',className:'form-input',value:firebaseConfig[key]||'',onChange:e=>setFirebaseConfig({...firebaseConfig,[key]:e.target.value}),placeholder:'e.g., AIzaSyD...'})
+          )),
+          React.createElement('div',{style:{display:'flex',gap:'12px'}},
+            React.createElement('button',{className:'btn buy-btn',onClick:()=>{saveFirebaseConfig(firebaseConfig);initFirebase(firebaseConfig);setFirebaseConfigMode(false);setFirebaseStatus('✓ Firebase config saved and initialized');setTimeout(()=>setFirebaseStatus(''),3000)}},'Save and Test'),
+            React.createElement('button',{className:'btn back-btn',onClick:()=>setFirebaseConfigMode(false)},'Cancel')
+          )
+        )
+      ),
       
       adminTab==='registrations'&&React.createElement('div',null,
         React.createElement('h2',null,'Teacher Registrations ('+data.teachers.length+')'),
@@ -414,10 +577,11 @@ function App(){
       React.createElement('button',{className:'back-btn',onClick:()=>setPage('store')},'← Back to Store'),
       React.createElement('div',{className:'header'},
         React.createElement('h1',null,'Teacher Login'),
-        React.createElement('p',{style:{fontSize:'1.2rem',marginTop:'16px',color:'#6b7280'}},'Log in with your registered email to view your classroom info')
+        React.createElement('p',{style:{fontSize:'1.2rem',marginTop:'16px',color:'#6b7280'}},'Log in with your registered email and password')
       ),
       React.createElement('div',{className:'form-container',style:{maxWidth:'400px',margin:'0 auto'}},
         status==='ok'&&React.createElement('div',{style:{padding:'16px',background:'#d1fae5',color:'#065f46',borderRadius:'8px',marginBottom:'20px'}},'Login successful!'),
+        getFirebaseConfig()&&React.createElement('div',{style:{padding:'12px',background:'#dbeafe',color:'#0c4a6e',borderRadius:'8px',marginBottom:'16px',fontSize:'.9rem'}},'✓ Using Firebase for secure authentication'),
         React.createElement('div',{style:{marginBottom:'20px'}},
           React.createElement('label',null,'Email Address'),
           React.createElement('input',{type:'email',className:'form-input',value:loginEmail,onChange:e=>setLoginEmail(e.target.value),placeholder:'your.email@school.ca'})
