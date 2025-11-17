@@ -108,6 +108,16 @@ function App(){
     window.open(links[p],'_blank');
   };
 
+  // simple SVG circle icons with a letter for each platform (avoids external assets)
+  const getIcon = (p) => {
+    const colors = {facebook:'#1877F2',twitter:'#1DA1F2',email:'#6B7280',whatsapp:'#25D366'};
+    const label = p==='email' ? '@' : p[0].toUpperCase();
+    return React.createElement('svg',{width:20,height:20,viewBox:'0 0 24 24',style:{flexShrink:0}},
+      React.createElement('circle',{cx:12,cy:12,r:10,fill:colors[p]||'#9CA3AF'}),
+      React.createElement('text',{x:12,y:12,fill:'#fff',fontSize:12,textAnchor:'middle',dominantBaseline:'middle',fontFamily:'Arial, Helvetica, sans-serif'},label)
+    );
+  };
+
   const deleteTeacher=idx=>{const updated={teachers:data.teachers.filter((_,i)=>i!==idx)};setData(updated);saveData(updated);};
   const exportCSV=()=>{const csv=['Name,Grade,District,School,Address,Email,Message'].concat(data.teachers.map(t=>`"${t.name}","${t.grade}","${t.district||''}","${t.school||''}","${t.address||''}","${t.email||''}","${t.message||''}"`)).join('\n');const blob=new Blob([csv],{type:'text/csv'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='teacher-registrations.csv';a.click();};
   
@@ -275,7 +285,10 @@ function App(){
     React.createElement('div',{className:'header'},
       React.createElement('h1',null,'Supply My Classroom'),
       React.createElement('div',{className:'share-bar'},
-        ['facebook','twitter','email','whatsapp'].map(p=>React.createElement('button',{key:p,className:'share-btn',onClick:()=>share(p)},p[0].toUpperCase()+p.slice(1).replace('email','Email')))
+        ['facebook','twitter','email','whatsapp'].map(p=>React.createElement('button',{key:p,className:'share-btn',onClick:()=>share(p)},
+          getIcon(p),
+          React.createElement('span',{style:{marginLeft:8,display:'inline-block',textTransform:'capitalize'}},p==='email'?'Email':p[0].toUpperCase()+p.slice(1))
+        ))
       )
     ),
     React.createElement('div',{className:'nav'},
